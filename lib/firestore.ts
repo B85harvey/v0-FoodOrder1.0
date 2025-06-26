@@ -11,31 +11,28 @@ import {
   where,
   Timestamp,
   setDoc,
-  // serverTimestamp, // Consider using for createdAt/updatedAt
-  // arrayUnion,
-  // arrayRemove,
 } from "firebase/firestore"
 
 // --- Interfaces ---
 
 export interface Ingredient {
-  id?: string // Can be a sub-collection or an array of objects
+  id?: string
   name: string
-  quantity: string // e.g., "2", "100", "0.5" - consider storing as number if possible
-  unit: string // e.g., "cups", "grams", "tbsp"
+  quantity: string // Stored as string, parsed to number when used in calculations
+  unit: string
 }
 
 export interface Recipe {
   id?: string
   name: string
   description: string
-  instructions: string[] // Array of instruction steps
-  ingredients: Ingredient[]
-  prepTime?: string // e.g., "30 minutes"
-  cookTime?: string // e.g., "1 hour"
+  instructions: string[]
+  ingredients: Ingredient[] // Ingredients as defined for the recipe template
+  prepTime?: string
+  cookTime?: string
   servings?: number
   imageUrl?: string
-  createdBy?: string // User ID of the creator
+  createdBy?: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
@@ -43,8 +40,8 @@ export interface Recipe {
 export interface InventoryItem {
   id?: string
   name: string
-  quantity: number
-  unit: string // e.g., "kg", "liters", "pieces"
+  quantity: number // Current stock quantity
+  unit: string
   category?: string
   expiryDate?: Timestamp
   lastUpdated?: Timestamp
@@ -53,32 +50,29 @@ export interface InventoryItem {
 
 export interface Class {
   id?: string
-  name: string // e.g., "Year 9 Food Tech - Group A"
-  day: string // e.g., "Monday"
-  time: string // e.g., "10:00 AM - 11:30 AM"
-  students: number // Number of students enrolled
-  room: string // e.g., "Kitchen 1"
-  teacher: string // Teacher's name or ID
-  // studentIds?: string[]; // Optional: list of student UIDs enrolled
+  name: string
+  day: string
+  time: string
+  students: number
+  room: string
+  teacher: string
 }
 
-export interface OrderItem {
-  recipeId: string
-  recipeName: string // Denormalized for easier display
-  quantity: number // Number of portions/servings of this recipe
-}
-
+// This is the corrected Order interface
 export interface Order {
   id?: string
   studentId: string
-  studentName?: string // Denormalized
+  studentName?: string
   classId: string
-  className?: string // Denormalized
-  orderDate: Timestamp // The date for which the food is being ordered
-  items: OrderItem[]
+  className?: string
+  recipeName: string // Name of the single recipe ordered
+  // Ingredients for that recipe, denormalized on the order.
+  // 'amount' here is the specific amount for THIS order, derived from the recipe.
+  ingredients: Array<{ id?: string; name: string; amount: string; unit: string }>
+  date: Timestamp // The date for which the food is being ordered / practical lesson date
   status: "pending" | "approved" | "rejected" | "prepared" | "collected"
-  createdAt?: Timestamp
-  notes?: string // Optional notes from student
+  createdAt?: Timestamp // Date the order was placed
+  notes?: string
 }
 
 export interface UserProfile {
@@ -86,8 +80,7 @@ export interface UserProfile {
   email: string
   displayName?: string
   role: "student" | "teacher" | "admin"
-  classId?: string // For students, the ID of their class
-  // any other relevant profile information
+  classId?: string
 }
 
 // --- Firestore Collection References ---
@@ -95,7 +88,7 @@ const inventoryCollection = collection(db, "inventory")
 const recipesCollection = collection(db, "recipes")
 const classesCollection = collection(db, "classes")
 const ordersCollection = collection(db, "orders")
-const usersCollection = collection(db, "users") // For user profiles
+const usersCollection = collection(db, "users")
 
 // --- Inventory Functions ---
 export const getInventoryItems = async (): Promise<InventoryItem[]> => {
@@ -244,103 +237,90 @@ export const updateUserProfile = async (
   await setDoc(userDoc, updates, { merge: true })
 }
 
-// --- Shopping List Function ---
-/**
- * Generates a shopping list based on approved orders for a specific class and date,
- * comparing required ingredients against current inventory.
- *
- * NOTE: This function is a simplified placeholder. Real-world implementation
- * requires robust unit parsing/conversion for ingredients and inventory items.
- */
-export const generateShoppingList = async (classId: string, targetDate: Date): Promise<any[]> => {
-  console.log(`Generating shopping list for class ${classId} for date ${targetDate.toDateString()}`)
+// --- Shopping List Function (Client-side version) ---
+// This client-side generateShoppingList is now aligned with the Cloud Function's expectation
+// that orders have denormalized ingredients.
+export const generateShoppingList = async (
+  // classId: string, // No longer needed if we fetch all relevant orders
+  // targetDate: Date // Or a date range
+): Promise<Record<string, { required: number; inStock: number; toOrder: number; unit: string }>> => {
+  console.log(`Generating shopping list from client...`)
 
-  // Define start and end of the target day for querying orders
-  const startOfDay = new Date(targetDate)
-  startOfDay.setHours(0, 0, 0, 0)
-  const endOfDay = new Date(targetDate)
-  endOfDay.setHours(23, 59, 59, 999)
+  // Fetch all orders (or filter by date range if needed)
+  // For simplicity, let's assume we get all 'pending' or 'approved' orders for an upcoming period.
+  // This logic should mirror the Cloud Function's order fetching logic.
+  const now = new Date()
+  const oneWeekLater = new Date()
+  oneWeekLater.setDate(now.getDate() + 7)
 
   const ordersQuery = query(
     ordersCollection,
-    where("classId", "==", classId),
-    where("orderDate", ">=", Timestamp.fromDate(startOfDay)),
-    where("orderDate", "<=", Timestamp.fromDate(endOfDay)),
-    where("status", "==", "approved"), // Only consider approved orders
+    where("date", ">=", Timestamp.fromDate(now)),
+    where("date", "<=", Timestamp.fromDate(oneWeekLater)),
+    // where("status", "in", ["pending", "approved"]) // Consider which statuses to include
   )
 
   const ordersSnapshot = await getDocs(ordersQuery)
   const relevantOrders = ordersSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Order)
 
   if (relevantOrders.length === 0) {
-    console.log("No approved orders found for the specified class and date.")
-    return []
+    console.log("No relevant orders found for the upcoming period.")
+    return {}
   }
 
-  // Aggregate all ingredients needed
-  const aggregatedIngredients: {
-    [key: string]: { name: string; totalQuantity: number; unit: string; recipeIds: Set<string> }
-  } = {}
+  const aggregatedIngredients: Record<string, { name: string; totalQuantity: number; unit: string }> = {}
 
   for (const order of relevantOrders) {
-    for (const orderItem of order.items) {
-      const recipe = await getRecipe(orderItem.recipeId)
-      if (recipe && recipe.ingredients) {
-        for (const ingredient of recipe.ingredients) {
-          const ingKey = `${ingredient.name.toLowerCase()}_${ingredient.unit.toLowerCase()}`
-          const quantity = Number.parseFloat(ingredient.quantity) * orderItem.quantity
+    if (order.ingredients && order.ingredients.length > 0) {
+      for (const ingredient of order.ingredients) {
+        const ingKey = `${ingredient.name.toLowerCase()}_${ingredient.unit.toLowerCase()}`
+        const quantity = Number.parseFloat(ingredient.amount)
 
-          if (isNaN(quantity)) {
-            console.warn(`Could not parse quantity for ingredient: ${ingredient.name} in recipe: ${recipe.name}`)
-            continue
-          }
-
-          if (!aggregatedIngredients[ingKey]) {
-            aggregatedIngredients[ingKey] = {
-              name: ingredient.name,
-              totalQuantity: 0,
-              unit: ingredient.unit,
-              recipeIds: new Set<string>(),
-            }
-          }
-          aggregatedIngredients[ingKey].totalQuantity += quantity
-          aggregatedIngredients[ingKey].recipeIds.add(recipe.id!)
+        if (isNaN(quantity)) {
+          console.warn(`Could not parse quantity for ingredient: ${ingredient.name} in order: ${order.id || "unknown"}`)
+          continue
         }
+
+        if (!aggregatedIngredients[ingKey]) {
+          aggregatedIngredients[ingKey] = {
+            name: ingredient.name,
+            totalQuantity: 0,
+            unit: ingredient.unit,
+          }
+        }
+        aggregatedIngredients[ingKey].totalQuantity += quantity
       }
     }
   }
 
-  // Get current inventory
   const inventoryItems = await getInventoryItems()
-  const inventoryMap: { [key: string]: InventoryItem } = {}
+  const inventoryMap: Record<string, InventoryItem> = {}
   inventoryItems.forEach((item) => {
     const invKey = `${item.name.toLowerCase()}_${item.unit.toLowerCase()}`
     inventoryMap[invKey] = item
   })
 
-  // Calculate items to shop for
-  const shoppingList: any[] = []
+  const shoppingListResult: Record<string, { required: number; inStock: number; toOrder: number; unit: string }> = {}
+
   for (const key in aggregatedIngredients) {
     const neededItem = aggregatedIngredients[key]
     const stockItem = inventoryMap[key]
 
-    let quantityToOrder = neededItem.totalQuantity
-    if (stockItem) {
-      // This assumes units are directly comparable. Real-world needs conversion.
-      quantityToOrder = Math.max(0, neededItem.totalQuantity - stockItem.quantity)
-    }
+    const requiredQuantity = neededItem.totalQuantity
+    const quantityInStock = stockItem ? stockItem.quantity : 0
+    const quantityToOrder = Math.max(0, requiredQuantity - quantityInStock)
 
-    if (quantityToOrder > 0) {
-      shoppingList.push({
-        name: neededItem.name,
-        unit: neededItem.unit,
-        quantityNeeded: neededItem.totalQuantity,
-        quantityInStock: stockItem ? stockItem.quantity : 0,
-        quantityToOrder: quantityToOrder,
-        // usedInRecipes: Array.from(neededItem.recipeIds) // Optional: for traceability
-      })
+    // Only add to shopping list if something needs to be ordered
+    // if (quantityToOrder > 0) { // Or show all items for clarity
+    shoppingListResult[neededItem.name] = {
+      // Using item name as key for the final list
+      required: requiredQuantity,
+      inStock: quantityInStock,
+      toOrder: quantityToOrder,
+      unit: neededItem.unit,
     }
+    // }
   }
-  console.log("Final shopping list:", shoppingList)
-  return shoppingList
+  console.log("Client-generated shopping list:", shoppingListResult)
+  return shoppingListResult
 }

@@ -1,5 +1,5 @@
 // Alternative Firebase config that uses environment variables
-import { initializeApp } from "firebase/app"
+import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app" // Import FirebaseApp type
 import { getFirestore } from "firebase/firestore"
 import { getAuth } from "firebase/auth"
 import { getAnalytics, isSupported } from "firebase/analytics"
@@ -15,7 +15,14 @@ const firebaseConfig = {
 }
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig)
+// Check if Firebase has already been initialized
+let app: FirebaseApp // Declare app with FirebaseApp type
+
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig)
+} else {
+  app = getApp() // if already initialized, use that one
+}
 
 // Initialize services
 export const db = getFirestore(app)
@@ -32,4 +39,5 @@ export const initializeAnalytics = async () => {
   return null
 }
 
-export default app
+export { app } // Named export for app
+export default app // Keep default export for compatibility if used elsewhere
