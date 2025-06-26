@@ -111,9 +111,14 @@ export default function InventoryPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Inventory Management</h1>
-        <Link href="/inventory/new">
-          <Button>Add New Item</Button>
-        </Link>
+        <div className="flex space-x-2">
+          <Link href="/inventory/new">
+            <Button>Add New Item</Button>
+          </Link>
+          <Link href="/dashboard/teacher">
+            <Button variant="outline">Return to Dashboard</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 mb-8">

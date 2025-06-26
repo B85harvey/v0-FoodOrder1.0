@@ -113,7 +113,7 @@ export default function NewRecipePage() {
         title: "Recipe Created",
         description: "The recipe has been created successfully",
       })
-      router.push(`/recipes/${recipeId}`)
+      router.push("/recipes")
     } catch (error) {
       console.error("Error creating recipe:", error)
       toast({
@@ -130,9 +130,14 @@ export default function NewRecipePage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Create New Recipe</h1>
-        <Link href="/recipes">
-          <Button variant="outline">Cancel</Button>
-        </Link>
+        <div className="flex space-x-2">
+          <Link href="/recipes">
+            <Button variant="outline">Cancel</Button>
+          </Link>
+          <Link href="/dashboard/teacher">
+            <Button variant="outline">Return to Dashboard</Button>
+          </Link>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>
