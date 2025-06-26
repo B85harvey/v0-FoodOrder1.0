@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { getInventoryItems, updateInventoryItem, type InventoryItem } from "@/lib/firestore"
+import Link from "next/link"
 
 // Categories for filtering
 const categories = ["All", "Dry Goods", "Dairy", "Spices", "Oils", "Baking"]
@@ -110,7 +111,9 @@ export default function InventoryPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Inventory Management</h1>
-        <Button>Add New Item</Button>
+        <Link href="/inventory/new">
+          <Button>Add New Item</Button>
+        </Link>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 mb-8">
@@ -195,10 +198,10 @@ export default function InventoryPage() {
                     <td className="py-3 px-4">
                       <Badge
                         className={`
-                        ${getStockStatus(item) === "low" ? "bg-red-100 text-red-800" : ""}
-                        ${getStockStatus(item) === "medium" ? "bg-amber-100 text-amber-800" : ""}
-                        ${getStockStatus(item) === "good" ? "bg-green-100 text-green-800" : ""}
-                      `}
+                      ${getStockStatus(item) === "low" ? "bg-red-100 text-red-800" : ""}
+                      ${getStockStatus(item) === "medium" ? "bg-amber-100 text-amber-800" : ""}
+                      ${getStockStatus(item) === "good" ? "bg-green-100 text-green-800" : ""}
+                    `}
                       >
                         {getStockStatus(item) === "low" ? "Low" : ""}
                         {getStockStatus(item) === "medium" ? "Medium" : ""}
